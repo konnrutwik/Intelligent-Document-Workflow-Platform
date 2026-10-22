@@ -2,6 +2,8 @@ server:
   port: 8080
 
 spring:
+  config:
+    import: optional:classpath:application-secrets.yaml
   servlet:
     multipart:
       max-file-size: 20MB
@@ -13,8 +15,7 @@ spring:
     active: dev
 
   mongodb:
-    uri: mongodb://admin:admin123@localhost:27017/document_workflow_db?authSource=admin
-    auto-index-creation: true
+    uri: ${MONGODB_URI}
 
   kafka:
     bootstrap-servers: localhost:9092
@@ -36,7 +37,7 @@ logging:
 
 app:
   jwt:
-    secret: ThisIsATemporaryDevOnlySecretKeyChangeInProdMinimum256Bits
+    secret: ${APP_JWT_SECRET}
     expiration-ms: 86400000
 
   upload:
@@ -44,3 +45,4 @@ app:
 
   ocr:
     tessdata-path: C:/Program Files/Tesseract-OCR/tessdata
+

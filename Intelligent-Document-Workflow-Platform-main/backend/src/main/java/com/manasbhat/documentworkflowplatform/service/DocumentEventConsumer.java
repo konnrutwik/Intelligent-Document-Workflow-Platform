@@ -1,5 +1,6 @@
 package com.manasbhat.documentworkflowplatform.service;
 
+import com.manasbhat.documentworkflowplatform.dto.AiAnalysisResult;
 import com.manasbhat.documentworkflowplatform.dto.DocumentUploadedEvent;
 import com.manasbhat.documentworkflowplatform.entity.DocumentEntity;
 import com.manasbhat.documentworkflowplatform.entity.DocumentStatus;
@@ -20,6 +21,10 @@ public class DocumentEventConsumer {
 
     private final DocumentRepository documentRepository;
     private final OcrService ocrService;
+    private final AiService aiService;
+    private final ApprovalService approvalService;
+    private final EmbeddingService embeddingService;
+    private final VectorSearchService vectorSearchService;
 
     @KafkaListener(topics = "document-uploaded", groupId = "document-workflow-group")
     @Retryable(retryFor = Exception.class, maxAttempts = 3, backoff = @Backoff(delay = 2000))
@@ -35,18 +40,52 @@ public class DocumentEventConsumer {
         doc.setUpdatedAt(Instant.now());
         documentRepository.save(doc);
 
+        approvalService.logSystemAction(
+                doc.getId(),
+                "PROCESSING_STARTED",
+                "Document processing started."
+        );
+
         try {
             String text = ocrService.extractText(doc.getFilePath());
             doc.setExtractedText(text);
+
+            if (text != null && !text.isBlank()) {
+                AiAnalysisResult aiResult = aiService.analyzeDocument(text);
+                doc.setAiSummary(aiResult.getSummary());
+                doc.setAiDocumentTypeGuess(aiResult.getDocumentTypeGuess());
+                doc.setAiExtractedEntities(aiResult.getExtractedEntities());
+
+                approvalService.logSystemAction(
+                        doc.getId(),
+                        "AI_ANALYSIS_COMPLETED",
+                        "AI analysis completed successfully."
+                );
+
+                var embedding = embeddingService.getEmbedding(text);
+                vectorSearchService.upsertDocument(doc.getId(), doc.getUploadedByUserId(), embedding, doc.getOriginalFileName(), aiResult.getSummary());
+            }
+
             doc.setStatus(DocumentStatus.PROCESSED);
             doc.setUpdatedAt(Instant.now());
             documentRepository.save(doc);
-            System.out.println("Document " + event.getDocumentId() + " OCR complete, marked PROCESSED");
+            approvalService.logSystemAction(
+                    doc.getId(),
+                    "PROCESSING_COMPLETED",
+                    "Document OCR and processing completed successfully."
+            );
+            approvalService.submitForApprovalFromEvent(doc.getId());
+            System.out.println("Document " + event.getDocumentId() + " OCR + AI analysis complete, marked PROCESSED");
         } catch (Exception e) {
             doc.setStatus(DocumentStatus.FAILED);
             doc.setUpdatedAt(Instant.now());
             documentRepository.save(doc);
-            System.out.println("OCR failed for " + event.getDocumentId() + ": " + e.getMessage());
+            approvalService.logSystemAction(
+                    doc.getId(),
+                    "PROCESSING_FAILED",
+                    "Document processing failed: " + e.getMessage()
+            );
+            System.out.println("Processing failed for " + event.getDocumentId() + ": " + e.getMessage());
             throw e;
         }
     }

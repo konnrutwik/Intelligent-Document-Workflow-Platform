@@ -38,9 +38,26 @@ public class DocumentEntity {
 
     private String uploadedByEmail;
 
+    private String assignedReviewerId;
+    private String assignedReviewerEmail;
+    private Instant assignedReviewerAt;
+
     private Instant uploadedAt;
 
     private Instant updatedAt;
 
     private String extractedText;
+
+    private String aiSummary;
+
+    private String aiDocumentTypeGuess;
+
+    private String aiExtractedEntities;
+
+    @Builder.Default
+    private ApprovalStatus approvalStatus = ApprovalStatus.NOT_SUBMITTED;
+
+    @Builder.Default
+    private int resubmissionCount = 0;
+    private String resubmissionOfDocumentId;
 }
